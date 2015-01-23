@@ -1,66 +1,107 @@
 local async = {}
 
-async.waterfall = function(tasks, finalCb)
-    local expected = 1
-    local iterate
+async._error = error
 
-    iterate = function(i, err, ...)
-        if expected ~= i then
-            return
-        end
-        expected = expected + 1
-        if err or i > #tasks then
-            if finalCb then
-                return finalCb(err, ...)
-            end
-            return
-        end
-        local task = tasks[i]
+local function dummyFunc()
+end
 
-        return task(function(...)
-            iterate(i + 1, ...)
-        end, ...)
+-- Call only once
+--
+local function onlyOnce(fn)
+    local called = false
+    return function(...)
+        if called then
+            error("Callback was already called.")
+        end
+        called = true
+        fn(...)
+    end
+end
+async.onlyOnce = onlyOnce
+
+-- Iterate arr in parallel
+--   and passes all results to the final callback.
+--
+async.each = function(arr, iterator, callback)
+    callback = callback or dummyFunc
+
+    local results = {}
+    local completed = 0
+
+    local function reduce(i, err, r)
+        if err then
+            local func = callback
+            callback = dummyFunc
+            return func(err)
+        end
+        results[i] = r
+        completed = completed + 1
+        if completed == #arr then
+            return callback(nil, results)
+        end
+    end
+
+    for i = 1, #arr do
+        iterator(arr[i], onlyOnce(function(...)
+            reduce(i, ...)
+        end))
+    end
+end
+
+-- Iterate arr in one by one
+--   and passes all results to the final callback.
+--
+async.eachSeries = function(arr, iterator, callback)
+    callback = callback or dummyFunc
+
+    local results = {}
+
+    local function iterate(i, err)
+        if err or i > #arr then
+            return callback(err, results)
+        end
+        return iterator(arr[i], onlyOnce(function(err, r)
+            results[i] = r
+            iterate(i + 1, err)
+        end))
     end
 
     iterate(1)
 end
 
-async.parallel = function(tasks, finalCb)
-    local results = {}
-    local abort = false
-    local status = {
-        n = 0
-    }
-    local iterate = function(i, err, r)
-        if abort then
-            return
-        end
-        if status[i] then
-            return
-        end
-        if err then
-            abort = true
-            if finalCb then
-                finalCb(err)
-            end
-            return
-        end
-        results[i] = r
-        status[i] = true
-        status.n = status.n + 1
+-- Do tasks one by one,
+--   and passes all results to the final callback.
+--
+async.series = function(tasks, callback)
+    return async.eachSeries(tasks, function(task, cb)
+        return task(cb)
+    end, callback)
+end
 
-        if status.n == #tasks then
-            if finalCb then
-                finalCb(nil, results)
-            end
+-- Do tasks one by one,
+--   and allow each function to pass its results to the next function,
+--
+async.waterfall = function(tasks, callback)
+    callback = callback or dummyFunc
+
+    local function iterate(i, err, ...)
+        if err or i > #tasks then
+            return callback(err, ...)
         end
+        return tasks[i](..., onlyOnce(function(...)
+            iterate(i + 1, ...)
+        end))
     end
 
-    for i = 1, #tasks do
-        tasks[i](function(...)
-            iterate(i, ...)
-        end)
-    end
+    iterate(1)
+end
+
+-- Do tasks in parallel
+--
+async.parallel = function(tasks, callback)
+    return async.each(tasks, function(task, cb)
+        return task(cb)
+    end, callback)
 end
 
 return async
