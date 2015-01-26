@@ -2,6 +2,8 @@ local async = require("async")
 
 local tests = {
 
+    --------------------------------------------------------------------------
+    --
     onlyOnce_should_throw_if_called_twice = function()
         local f = async.onlyOnce(function()
         end)
@@ -9,6 +11,8 @@ local tests = {
         assert(not pcall(f))
     end,
 
+    --------------------------------------------------------------------------
+    --
     each_should_iterate_in_parallel = function()
         local arr       = {1, 2, 3}
         local callbacks = {}
@@ -20,6 +24,18 @@ local tests = {
         assert(callbacks[1])
         assert(callbacks[2])
         assert(callbacks[3])
+    end,
+
+    each_can_accept_empty_array = function()
+        local finished = false
+        async.each({}, function()
+            assert(false, "should not be called")
+        end,
+        function(err)
+            assert(not err)
+            finished = true
+        end)
+        assert(finished)
     end,
 
     each_can_finish_without_error = function()
@@ -72,6 +88,8 @@ local tests = {
         callbacks[3]()
     end,
 
+    --------------------------------------------------------------------------
+    --
     eachSeries_should_iterate_one_by_one = function()
         local arr       = {1, 2, 3}
         local callbacks = {}
@@ -86,6 +104,18 @@ local tests = {
         callbacks[1]()
         expected = 3
         callbacks[2]()
+    end,
+
+    eachSeries_can_accept_empty_array = function()
+        local finished = false
+        async.eachSeries({}, function()
+            assert(false, "should not be called")
+        end,
+        function(err)
+            assert(not err)
+            finished = true
+        end)
+        assert(finished)
     end,
 
     eachSeries_can_finish_without_error = function()

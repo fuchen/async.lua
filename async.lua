@@ -25,6 +25,10 @@ async.onlyOnce = onlyOnce
 async.each = function(arr, iterator, callback)
     callback = callback or dummyFunc
 
+    if #arr == 0 then
+        return callback(nil, {})
+    end
+
     local results = {}
     local completed = 0
 
